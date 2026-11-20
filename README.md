@@ -10,6 +10,8 @@ Offline-first second-screen companion for Conan Exiles.
 - Explicit connecting, connected, disconnected, and error states
 - Position data is cleared when the bridge disconnects; stale positions are clearly labeled
 - Authorized bridge discovery messages mark matching POIs as seen
+- User-configurable world-coordinate bounds place the live marker on the map
+- Versioned JSON data-pack import validates coordinates and license metadata
 
 ## Bridge messages
 
@@ -19,6 +21,22 @@ Offline-first second-screen companion for Conan Exiles.
 ```
 
 The bridge is a protocol boundary only; this project does not read game memory or include a Conan Exiles server mod. Discovery automation requires a separately authorized integration. Position status becomes stale after five seconds without updates.
+
+## Data-pack format
+
+Import a `.json` file containing a version 1 object. Coordinates are map percentages (0–100); attribution and license are required. POI IDs must be unique within the pack. Updating an existing ID changes its map data but retains your local notes and discovery status. Imports are limited to 2 MB.
+
+```json
+{
+  "version": 1,
+  "title": "Example locations",
+  "attribution": "Your name or source",
+  "license": "CC BY 4.0",
+  "pois": [
+    { "id": "example-site", "name": "Example Site", "category": "Relic", "x": 42, "y": 58 }
+  ]
+}
+```
 
 ## Development
 
@@ -39,3 +57,4 @@ npm run tauri dev
 - No third-party map website is scraped.
 - Dataset entries should include attribution and reuse permission.
 - Live tracking is opt-in and connects only to a local service.
+- Imported data is validated locally and stored in browser local storage with personal progress.
