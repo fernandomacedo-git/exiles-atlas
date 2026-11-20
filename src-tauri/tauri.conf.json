@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Exiles Atlas",
+  "version": "0.1.0",
+  "identifier": "dev.fernandomacedo.exilesatlas",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{
+      "title": "Exiles Atlas",
+      "width": 1280,
+      "height": 800,
+      "resizable": true
+    }]
+  }
+}
