@@ -1,36 +1,23 @@
-import { useMemo, useState } from 'react'
-
-type Category = 'Gatherable' | 'Treasure' | 'Chest' | 'Weapon' | 'Relic' | 'Boss' | 'Recipe' | 'Event'
-type PoiStatus = 'new' | 'seen' | 'collected'
-
-interface Poi {
-  id: number
-  name: string
-  category: Category
-  x: number
-  y: number
-  status: PoiStatus
-  note: string
-}
-
-const initialPois: Poi[] = [
-  { id: 1, name: 'The Dregs', category: 'Relic', x: 43, y: 72, status: 'seen', note: 'Dungeon entrance; check for learned recipes.' },
-  { id: 2, name: 'Bright Leviathan', category: 'Chest', x: 27, y: 38, status: 'new', note: '' },
-  { id: 3, name: 'New Asagarth', category: 'Boss', x: 68, y: 31, status: 'seen', note: 'Heavy clan presence.' },
-  { id: 4, name: 'Khari Treasure', category: 'Treasure', x: 58, y: 57, status: 'collected', note: 'Mountain route is safest.' },
-  { id: 5, name: 'Iron Deposit', category: 'Gatherable', x: 36, y: 48, status: 'new', note: '' },
-  { id: 6, name: 'Mounds of the Dead', category: 'Event', x: 49, y: 20, status: 'new', note: '' },
-  { id: 7, name: 'Eyelet Cape Recipes', category: 'Recipe', x: 76, y: 68, status: 'new', note: '' },
-]
-
-const categories: Category[] = ['Gatherable', 'Treasure', 'Chest', 'Weapon', 'Relic', 'Boss', 'Recipe', 'Event']
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { categoryNames, initialPois } from './data/pois'
+import { LivePositionBridge } from './lib/liveBridge'
+import { loadPois, savePois } from './lib/storage'
+import type { Category, LivePosition, Poi, PoiStatus } from './types'
 
 export default function App() {
-  const [pois, setPois] = useState(initialPois)
-  const [selected, setSelected] = useState<Poi | null>(initialPois[0])
+  const [pois, setPois] = useState<Poi[]>(() => loadPois(initialPois))
+  const [selected, setSelected] = useState<Poi | null>(() => loadPois(initialPois)[0])
   const [query, setQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All')
-  const [showLive, setShowLive] = useState(false)
+  const [position, setPosition] = useState<LivePosition | null>(null)
+  const [bridgeError, setBridgeError] = useState(false)
+  const bridgeRef = useRef<LivePositionBridge | null>(null)
+
+  useEffect(() => savePois(pois), [pois])
+
+  useEffect(() => () => {
+    bridgeRef.current?.disconnect()
+  }, [])
 
   const filtered = useMemo(() => pois.filter((poi) => {
     const matchesText = `${poi.name} ${poi.note}`.toLowerCase().includes(query.toLowerCase())
@@ -38,7 +25,7 @@ export default function App() {
     return matchesText && matchesCategory
   }), [pois, query, activeCategory])
 
-  const updatePoi = (id: number, patch: Partial<Poi>) => {
+  const updatePoi = (id: string, patch: Partial<Poi>) => {
     setPois((current) => current.map((poi) => poi.id === id ? { ...poi, ...patch } : poi))
     setSelected((current) => current?.id === id ? { ...current, ...patch } : current)
   }
@@ -46,6 +33,28 @@ export default function App() {
   const markStatus = (status: PoiStatus) => {
     if (selected) updatePoi(selected.id, { status })
   }
+
+  const toggleLive = () => {
+    if (bridgeRef.current) {
+      bridgeRef.current.disconnect()
+      bridgeRef.current = null
+      setPosition(null)
+      setBridgeError(false)
+      return
+    }
+
+    const bridgeUrl = 'ws://127.0.0.1:7811/exiles-atlas'
+    setBridgeError(false)
+    const bridge = new LivePositionBridge(
+      bridgeUrl,
+      setPosition,
+      () => setBridgeError(true),
+    )
+    bridgeRef.current = bridge
+    bridge.connect()
+  }
+
+  const isLive = Boolean(position && Date.now() - position.updatedAt < 5000)
 
   return (
     <main className="app-shell">
@@ -59,12 +68,12 @@ export default function App() {
         </header>
 
         <label className="search">
-          <span>⌕</span>
+          <span aria-hidden="true">⌕</span>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search locations or notes" />
         </label>
 
         <div className="filters" aria-label="POI categories">
-          {(['All', ...categories] as const).map((category) => (
+          {(['All', ...categoryNames] as const).map((category) => (
             <button
               key={category}
               className={activeCategory === category ? 'filter active' : 'filter'}
@@ -97,8 +106,8 @@ export default function App() {
             <span className="eyebrow">Exiled Lands</span>
             <h2>Region Map</h2>
           </div>
-          <button className={showLive ? 'live enabled' : 'live'} onClick={() => setShowLive((value) => !value)}>
-            <span /> {showLive ? 'Live tracking on' : 'Connect live position'}
+          <button className={position ? 'live enabled' : 'live'} onClick={toggleLive}>
+            <span /> {position ? 'Live position on' : bridgeError ? 'Retry live position' : 'Connect live position'}
           </button>
         </header>
 
@@ -118,8 +127,14 @@ export default function App() {
                 <span>{poi.category === 'Boss' ? '†' : poi.category === 'Chest' ? '◆' : '●'}</span>
               </button>
             ))}
-            {showLive && <div className="player-marker" style={{ left: '51%', top: '63%' }}><span /></div>}
-            <div className="coordinates">X 51 · Y 63 · Z 26</div>
+            {position && (
+              <div className={isLive ? 'player-marker' : 'player-marker stale'} style={{ left: '51%', top: '63%' }}>
+                <span />
+              </div>
+            )}
+            <div className="coordinates">
+              {position ? `X ${position.x.toFixed(1)} · Y ${position.y.toFixed(1)} · Z ${position.z.toFixed(1)}${isLive ? '' : ' · stale'}` : 'No live position'}
+            </div>
           </div>
         </div>
 
@@ -128,6 +143,7 @@ export default function App() {
             <button className="close" onClick={() => setSelected(null)} aria-label="Close details">×</button>
             <span className="detail-category">{selected.category}</span>
             <h3>{selected.name}</h3>
+            {selected.source && <p className="detail-source">Source: {selected.source}</p>}
             <p className="detail-status"><span className={`status-dot ${selected.status}`} /> {selected.status}</p>
             <label>
               Personal notes
