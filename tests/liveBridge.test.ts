@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LivePositionBridge } from '../src/lib/liveBridge'
 import type { LivePosition } from '../src/types'
 
 class MockWebSocket {
   static instance: MockWebSocket
-  onmessage: ((event: { data: string }) => void) | null = null
+  onopen: (() => void) | null = null
+  onmessage: ((event: { data: unknown }) => void) | null = null
   onclose: (() => void) | null = null
   onerror: (() => void) | null = null
 
@@ -15,29 +16,65 @@ class MockWebSocket {
   close() {
     this.onclose?.()
   }
+
+  emitClose() {
+    this.onclose?.()
+  }
 }
 
-describe('LivePositionBridge', () => {
-  it('accepts a finite position frame', () => {
+describe('LivePositionBridge lifecycle', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('moves through connecting and connected for valid position messages', () => {
     vi.stubGlobal('WebSocket', MockWebSocket)
     const positions: LivePosition[] = []
-    const bridge = new LivePositionBridge('ws://127.0.0.1/test', (position) => positions.push(position), vi.fn())
+    const states: string[] = []
+    const bridge = new LivePositionBridge('ws://127.0.0.1/test', (value) => positions.push(value), (state) => states.push(state))
 
     bridge.connect()
+    MockWebSocket.instance.onopen?.()
     MockWebSocket.instance.onmessage?.({ data: JSON.stringify({ type: 'position', x: 12.5, y: 44.2, z: 8 }) })
 
-    expect(positions).toHaveLength(1)
+    expect(states).toEqual(['connecting', 'connected'])
     expect(positions[0]).toMatchObject({ x: 12.5, y: 44.2, z: 8 })
   })
 
-  it('rejects a position frame with non-finite values', () => {
+  it('clears a failed connection and can be retried', () => {
     vi.stubGlobal('WebSocket', MockWebSocket)
-    const listener = vi.fn()
-    const bridge = new LivePositionBridge('ws://127.0.0.1/test', listener, vi.fn())
+    const states: string[] = []
+    const bridge = new LivePositionBridge('ws://127.0.0.1/test', vi.fn(), (state) => states.push(state))
 
     bridge.connect()
-    MockWebSocket.instance.onmessage?.({ data: JSON.stringify({ type: 'position', x: null, y: 2, z: 3 }) })
+    const failedSocket = MockWebSocket.instance
+    failedSocket.onerror?.()
+    failedSocket.emitClose()
+    bridge.connect()
 
-    expect(listener).not.toHaveBeenCalled()
+    expect(states).toEqual(['connecting', 'error', 'connecting'])
+  })
+
+  it('disconnects without treating intentional close as an error', () => {
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const states: string[] = []
+    const bridge = new LivePositionBridge('ws://127.0.0.1/test', vi.fn(), (state) => states.push(state))
+
+    bridge.connect()
+    bridge.disconnect()
+    MockWebSocket.instance.emitClose()
+
+    expect(states).toEqual(['connecting', 'disconnected'])
+  })
+
+  it('forwards valid discovery messages and ignores malformed frames', () => {
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    const discovered = vi.fn()
+    const bridge = new LivePositionBridge('ws://127.0.0.1/test', vi.fn(), vi.fn(), discovered)
+
+    bridge.connect()
+    MockWebSocket.instance.onmessage?.({ data: JSON.stringify({ type: 'discovery', poiId: 'iron-deposit' }) })
+    MockWebSocket.instance.onmessage?.({ data: '{' })
+
+    expect(discovered).toHaveBeenCalledOnce()
+    expect(discovered).toHaveBeenCalledWith('iron-deposit')
   })
 })

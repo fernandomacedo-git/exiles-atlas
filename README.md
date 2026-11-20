@@ -4,44 +4,38 @@ Offline-first second-screen companion for Conan Exiles.
 
 ## Current prototype
 
-- Searchable and filterable POI list
-- Discovery states: new, seen, collected
-- Personal notes and status persistence in local browser storage
-- Source-attribution field for future reviewed data packs
-- Opt-in local WebSocket position bridge
-- Stale-position and connection-error states
+- Searchable, filterable POIs with local notes and discovery status
+- Local browser persistence for personal progress
+- Opt-in WebSocket bridge at `ws://127.0.0.1:7811/exiles-atlas`
+- Explicit connecting, connected, disconnected, and error states
+- Position data is cleared when the bridge disconnects; stale positions are clearly labeled
+- Authorized bridge discovery messages mark matching POIs as seen
 
-## Live integration
-
-The app intentionally does not read Conan Exiles process memory. The current bridge protocol is a local WebSocket service at:
-
-```text
-ws://127.0.0.1:7811/exiles-atlas
-```
-
-Supported position message:
+## Bridge messages
 
 ```json
 {"type":"position","x":51.2,"y":63.1,"z":26.4}
+{"type":"discovery","poiId":"iron-deposit"}
 ```
 
-Automatic discovery may later consume `type: "discovery"` messages, but only from an authorized server/mod integration.
+The bridge is a protocol boundary only; this project does not read game memory or include a Conan Exiles server mod. Discovery automation requires a separately authorized integration. Position status becomes stale after five seconds without updates.
 
 ## Development
 
 ```bash
 npm install
 npm run dev
+npm test
 ```
 
-For the desktop shell:
+Desktop shell:
 
 ```bash
 npm run tauri dev
 ```
 
-## Boundaries
+## Data and privacy
 
-- No scraping of third-party map sites without permission.
-- No memory reading or client modification.
-- Live position is opt-in and local-only.
+- No third-party map website is scraped.
+- Dataset entries should include attribution and reuse permission.
+- Live tracking is opt-in and connects only to a local service.

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { categoryNames, initialPois } from './data/pois'
 import { LivePositionBridge } from './lib/liveBridge'
 import { loadPois, savePois } from './lib/storage'
+import type { BridgeState } from './lib/liveBridge'
 import type { Category, LivePosition, Poi, PoiStatus } from './types'
 
 export default function App() {
@@ -10,7 +11,7 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All')
   const [position, setPosition] = useState<LivePosition | null>(null)
-  const [bridgeError, setBridgeError] = useState(false)
+  const [bridgeState, setBridgeState] = useState<BridgeState>('disconnected')
   const [clock, setClock] = useState(Date.now())
   const bridgeRef = useRef<LivePositionBridge | null>(null)
 
@@ -46,25 +47,37 @@ export default function App() {
       bridgeRef.current.disconnect()
       bridgeRef.current = null
       setPosition(null)
-      setBridgeError(false)
       return
     }
 
-    const bridgeUrl = 'ws://127.0.0.1:7811/exiles-atlas'
-    setBridgeError(false)
     const bridge = new LivePositionBridge(
-      bridgeUrl,
+      'ws://127.0.0.1:7811/exiles-atlas',
       (nextPosition) => {
         setPosition(nextPosition)
         setClock(Date.now())
       },
-      () => setBridgeError(true),
+      (state) => {
+        setBridgeState(state)
+        if (state === 'disconnected' || state === 'error') setPosition(null)
+        if (state === 'disconnected' || state === 'error') bridgeRef.current = null
+      },
+      (poiId) => {
+        setPois((current) => current.map((poi) => poi.id === poiId ? { ...poi, status: 'seen' } : poi))
+        setSelected((current) => current?.id === poiId ? { ...current, status: 'seen' } : current)
+      },
     )
     bridgeRef.current = bridge
     bridge.connect()
   }
 
-  const isLive = Boolean(position && clock - position.updatedAt < 5000)
+  const isLive = Boolean(position && bridgeState === 'connected' && clock - position.updatedAt < 5000)
+  const buttonLabel = bridgeState === 'connected'
+    ? 'Disconnect live position'
+    : bridgeState === 'connecting'
+      ? 'Cancel connection'
+      : bridgeState === 'error'
+        ? 'Retry live position'
+        : 'Connect live position'
 
   return (
     <main className="app-shell">
@@ -116,8 +129,8 @@ export default function App() {
             <span className="eyebrow">Exiled Lands</span>
             <h2>Region Map</h2>
           </div>
-          <button className={position ? 'live enabled' : 'live'} onClick={toggleLive}>
-            <span /> {position ? 'Live position on' : bridgeError ? 'Retry live position' : 'Connect live position'}
+          <button className={isLive ? 'live enabled' : 'live'} onClick={toggleLive}>
+            <span /> {buttonLabel}
           </button>
         </header>
 
@@ -143,7 +156,7 @@ export default function App() {
               </div>
             )}
             <div className="coordinates">
-              {position ? `X ${position.x.toFixed(1)} · Y ${position.y.toFixed(1)} · Z ${position.z.toFixed(1)}${isLive ? '' : ' · stale'}` : 'No live position'}
+              {position ? `X ${position.x.toFixed(1)} · Y ${position.y.toFixed(1)} · Z ${position.z.toFixed(1)}${isLive ? '' : ' · stale'}` : bridgeState === 'connecting' ? 'Connecting to local bridge…' : 'No live position'}
             </div>
           </div>
         </div>
