@@ -11,9 +11,16 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All')
   const [position, setPosition] = useState<LivePosition | null>(null)
   const [bridgeError, setBridgeError] = useState(false)
+  const [clock, setClock] = useState(Date.now())
   const bridgeRef = useRef<LivePositionBridge | null>(null)
 
   useEffect(() => savePois(pois), [pois])
+
+  useEffect(() => {
+    if (!position) return
+    const timer = window.setInterval(() => setClock(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [Boolean(position)])
 
   useEffect(() => () => {
     bridgeRef.current?.disconnect()
@@ -47,14 +54,17 @@ export default function App() {
     setBridgeError(false)
     const bridge = new LivePositionBridge(
       bridgeUrl,
-      setPosition,
+      (nextPosition) => {
+        setPosition(nextPosition)
+        setClock(Date.now())
+      },
       () => setBridgeError(true),
     )
     bridgeRef.current = bridge
     bridge.connect()
   }
 
-  const isLive = Boolean(position && Date.now() - position.updatedAt < 5000)
+  const isLive = Boolean(position && clock - position.updatedAt < 5000)
 
   return (
     <main className="app-shell">
