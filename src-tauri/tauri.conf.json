@@ -9,6 +9,17 @@
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
+  "bundle": {
+    "active": true,
+    "targets": ["msi"],
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "wix": {
+        "upgradeCode": "a7d9a66b-0bf4-4b25-aab5-3c0bf6f68f9e",
+        "language": "en-US"
+      }
+    }
+  },
   "app": {
     "windows": [{
       "title": "Exiles Atlas",

@@ -2,6 +2,22 @@
 
 Offline-first second-screen companion for Conan Exiles.
 
+## Windows MSI installer
+
+Build the MSI installer locally with PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-windows-msi.ps1
+```
+
+Or:
+
+```powershell
+npm run build:windows-msi:ps
+```
+
+The installer package is written to `src-tauri/target/release/bundle/msi/`. Building Windows MSI packages requires Windows, Node.js, Rust, Cargo, and the Microsoft Visual C++ build tools.
+
 ## Current prototype
 
 - Searchable, filterable POIs with local notes and discovery status
